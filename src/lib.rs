@@ -11,6 +11,7 @@ If you want multiple seperate sequences simultaneously, you can use a [SequenceW
 
 */
 use std::{
+    cell::Cell,
     fmt::Debug,
 };
 
@@ -24,7 +25,7 @@ const CTRL_C: u8 = 3;
 const CTRL_D: u8 = 4;
 
 // Watch the input stream for two consecutive <CTRL-C> characters.
-let mut quit_watchers = SequenceWatchers::new(&[&[CTRL_C, CTRL_C], &[CTRL_C, CTRL_D]]);
+let quit_watchers = SequenceWatchers::new(&[&[CTRL_C, CTRL_C], &[CTRL_C, CTRL_D]]);
 
 
 for b in b'a'..=b'z' {
@@ -56,7 +57,7 @@ impl<T: PartialEq + Clone + Debug> SequenceWatchers<T> {
     ```
     use seq_watcher::SequenceWatchers;
 
-    let mut quit_watchers = SequenceWatchers::new(&[&['q'], &['Q']]);
+    let quit_watchers = SequenceWatchers::new(&[&['q'], &['Q']]);
 
     assert_eq!(true, quit_watchers.check(&'q'));
     assert_eq!(true, quit_watchers.check(&'Q'));
@@ -79,7 +80,7 @@ impl<T: PartialEq + Clone + Debug> SequenceWatchers<T> {
     ```
     use seq_watcher::SequenceWatchers;
 
-    let mut quit_watchers = SequenceWatchers::new(&[&[false, true], &[false, true, true]]);
+    let quit_watchers = SequenceWatchers::new(&[&[false, true], &[false, true, true]]);
 
     assert_eq!(false, quit_watchers.check(&true));
     assert_eq!(false, quit_watchers.check(&false));
@@ -87,9 +88,9 @@ impl<T: PartialEq + Clone + Debug> SequenceWatchers<T> {
     assert_eq!(true, quit_watchers.check(&true));   // Matches second sequence
     ```
     */
-    pub fn check(&mut self, value: &T) -> bool {
+    pub fn check(&self, value: &T) -> bool {
         let mut result = false;
-        for watcher in &mut self.watchers {
+        for watcher in &self.watchers {
             if watcher.check(value) {
                 result = true;
             }
@@ -107,7 +108,7 @@ use seq_watcher::SequenceWatcher;
 const CTRL_C: u8 = 3;
 
 // Watch the input stream for two consecutive <CTRL-C> characters.
-let mut quit_watcher = SequenceWatcher::new(&[CTRL_C, CTRL_C]);
+let quit_watcher = SequenceWatcher::new(&[CTRL_C, CTRL_C]);
 
 
 for b in b'a'..=b'z' {
@@ -123,7 +124,7 @@ where
     T: PartialEq + Clone + Debug,
 {
     sequence: Vec<T>,
-    index: usize,
+    index: Cell<usize>,
 }
 
 impl<T: PartialEq + Clone + Debug> SequenceWatcher<T> {
@@ -138,7 +139,7 @@ impl<T: PartialEq + Clone + Debug> SequenceWatcher<T> {
     ```
     use seq_watcher::SequenceWatcher;
 
-    let mut quit_watcher = SequenceWatcher::new(&['q', 'u', 'i', 't']);
+    let quit_watcher = SequenceWatcher::new(&['q', 'u', 'i', 't']);
 
     assert_eq!(false, quit_watcher.check(&'q'));
     assert_eq!(false, quit_watcher.check(&'u'));
@@ -149,7 +150,7 @@ impl<T: PartialEq + Clone + Debug> SequenceWatcher<T> {
     pub fn new(seq: &[T]) -> Self {
         Self {
             sequence: seq.to_vec(),
-            index: 0,
+            index: Cell::new(0),
         }
     }
 
@@ -162,7 +163,7 @@ impl<T: PartialEq + Clone + Debug> SequenceWatcher<T> {
     ```
     use seq_watcher::SequenceWatcher;
 
-    let mut quit_watcher = SequenceWatcher::new(&[Some("quit")]);
+    let quit_watcher = SequenceWatcher::new(&[Some("quit")]);
 
     assert_eq!(false, quit_watcher.check(&None));
     assert_eq!(false, quit_watcher.check(&Some("something")));
@@ -170,56 +171,52 @@ impl<T: PartialEq + Clone + Debug> SequenceWatcher<T> {
     assert_eq!(true, quit_watcher.check(&Some("quit")));
     ```
     */
-    pub fn check(&mut self, value: &T) -> bool {
+    pub fn check(&self, value: &T) -> bool {
         if self.sequence.is_empty() { return false; }
-        if *value == self.sequence[self.index] {
-            self.index += 1;
-            if self.sequence.len() > self.index {
-                false
-            }
-            else {
-                self.index = 0;
-                true
-            }
+        self.witness(value);
+        if self.sequence.len() == self.index.get() {
+            self.index.set(0);
+            true
         }
         else {
-            match self.index {
-                0 => false,
+            false
+        }
+    }
+
+    // Internal function that does all of the work of monitoring a new data type, but doesn't check
+    // to see if it has successfully reached the end of the sequence. This shouldn't be a public
+    // interface because it can leave the watcher in an invalid state (i.e. watchers should always
+    // be able to accept new input data, but this can leave the index pointing past the end of the
+    // vector.
+    fn witness(&self, value: &T) {
+        if self.sequence.is_empty() { return; }
+        if *value == self.sequence[self.index.get()] {
+            self.index.set(self.index.get() + 1);
+        }
+        else {
+            match self.index.get() {
+                0 => {},
                 1 => {
-                    // If we only matched one previous value, just reset the index and try the new
-                    // value again.
-                    self.index = 0;
-                    self.check(value)
+                    self.index.set(0);
+                    self.witness(value)
                 },
                 _ => {
-                    // If we have a mismatch after a partial match, we need to make sure that we
-                    // don't lose any previous characters.
-                    let old_index = self.index;
-                    self.index = 0;
-                    let mut new_start = None;
-                    let mut i = 1;
-                    while i < old_index {
-                        if self.sequence[i] == self.sequence[self.index] {
-                            self.index += 1;
-                            if None == new_start {
-                                new_start = Some(i)
-                            }
-                        }
-                        else {
-                            // If we get a mismatch, did we already have a partial match?
-                            if let Some(j) = new_start {
-                                // On a previous partial match restart the matching at the index
-                                // after the previous start.
-                                i = j;  // Will be incremented before the next test.
-                                self.index = 0;
-                                new_start = None;
-                            }
-                        }
-                        i += 1;
-                    }
-                    self.check(value)
-                }
+                    self.on_mismatch(&self.sequence[1..self.index.get()]);
+                    self.witness(value)
+                },
             }
+        }
+    }
+
+    // Internal function that is given a subset of the sequence that it resends to itself after
+    // resetting the index to 0.
+    fn on_mismatch(&self, retry: &[T]) {
+        self.index.set(0);
+        for value in retry {
+            self.witness(value);
+            // I am a little concerned about a recursive loop since witness calls on_mismatch, but
+            // I think it will be fine since the data sets that they retry are always decreasing.
+            // I'll try to think of a sequence that will exercise this.
         }
     }
 }
@@ -310,7 +307,7 @@ mod tests {
     fn test_seq_watcher<T: PartialEq + Clone + Debug>(sequence: &[T], stream: &[T]) -> Result<(), proptest::test_runner::TestCaseError> {
         prop_assert!(0 < stream.len(), "Invalid stream: {:?}", stream);
         prop_assert!(0 < sequence.len(), "Invalid sequence: {:?}", sequence);
-        let mut seq_watcher = SequenceWatcher::new(sequence);
+        let seq_watcher = SequenceWatcher::new(sequence);
         let last_index = stream.len() - 1;
         for i in 0..last_index {
             prop_assert_eq!(false, seq_watcher.check(&stream[i]));
@@ -397,7 +394,7 @@ mod tests {
     proptest! {
         #[test]
         fn empty_char_sequence_is_always_false(stream in char_vec(10..50)) {
-            let mut seq_watcher = SequenceWatcher::new(&[]);
+            let seq_watcher = SequenceWatcher::new(&[]);
             for c in stream {
                 prop_assert_eq!(false, seq_watcher.check(&c));
             }
@@ -407,7 +404,7 @@ mod tests {
     proptest! {
         #[test]
         fn empty_byte_sequence_is_always_false(stream in byte_vec(10..50)) {
-            let mut seq_watcher = SequenceWatcher::new(&[]);
+            let seq_watcher = SequenceWatcher::new(&[]);
             for b in stream {
                 prop_assert_eq!(false, seq_watcher.check(&b));
             }
@@ -417,7 +414,7 @@ mod tests {
     proptest! {
         #[test]
         fn empty_byte_or_char_sequence_is_always_false(stream in byte_or_char_vec(10..50)) {
-            let mut seq_watcher = SequenceWatcher::new(&[]);
+            let seq_watcher = SequenceWatcher::new(&[]);
             for c in stream {
                 prop_assert_eq!(false, seq_watcher.check(&c));
             }
@@ -429,15 +426,15 @@ mod tests {
         // This will fail if we just discard the state on a mismatch. On a failing case, when it
         // hits the second zero in the stream, it forgets about both zeroes and then doesn't match
         // the 1 because it is expecting a zero first.
-        test_seq_watcher(&[false, true], &[false, false, true]).unwrap();
+        test_seq_watcher(&[false, true], &[false, false, true]).expect("Failed specific test pattern 1");
         // Let's say that we are smarter and pass the first test by retrying the current character
         // after resetting the index. what happens if we need a partial reset.
-        test_seq_watcher(&[0u64, 0, 1], &[0, 0, 0, 1]).unwrap();
+        test_seq_watcher(&[0u64, 0, 1], &[0, 0, 0, 1]).expect("Failed specific test pattern 2");
         // Now we need a pattern that will cause the simple fix for the second test to fail (or
         // maybe I don't need the more complicated solution). 
-        test_seq_watcher(&["F", "T", "F", "F", "F"], &["F", "T", "F", "F", "T", "F", "F", "F"]).unwrap();
+        test_seq_watcher(&["F", "T", "F", "F", "F"], &["F", "T", "F", "F", "T", "F", "F", "F"]).expect("Failed specific test pattern 3");
         // Now we'll just repeat the last pattern with some alternate types.
-        test_seq_watcher(&[None, Some(0.0), None, None, None], &[None, Some(0.0), None, None, Some(0.0), None, None, None]).unwrap();
-        test_seq_watcher(&[Err(()), Ok(()), Err(()), Err(()), Err(())], &[Err(()), Ok(()), Err(()), Err(()), Ok(()), Err(()), Err(()), Err(())]).unwrap();
+        test_seq_watcher(&[None, Some(0.0), None, None, None], &[None, Some(0.0), None, None, Some(0.0), None, None, None]).expect("Failed specific test pattern 4");
+        test_seq_watcher(&[Err(()), Ok(()), Err(()), Err(()), Err(())], &[Err(()), Ok(()), Err(()), Err(()), Ok(()), Err(()), Err(()), Err(())]).expect("Failed specific test pattern 5");
     }
 }
