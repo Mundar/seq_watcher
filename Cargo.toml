@@ -13,8 +13,3 @@ repository = "https://github.com/Mundar/seq_watcher"
 
 [dev-dependencies]
 proptest = "1.0.0"
-criterion = "0.3"
-
-[[bench]]
-name="benchmarks"
-harness=false
