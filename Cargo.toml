@@ -1,6 +1,6 @@
 [package]
 name = "seq_watcher"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Thomas Mundar <thomas@mundar.com>"]
 edition = "2018"
 description = "A pair of structures for monitoring a stream of data for one or more sequences."
@@ -13,3 +13,8 @@ repository = "https://github.com/Mundar/seq_watcher"
 
 [dev-dependencies]
 proptest = "1.0.0"
+criterion = {version = "0.3", features = [ "html_reports" ]}
+
+[[bench]]
+name="benchmarks"
+harness=false

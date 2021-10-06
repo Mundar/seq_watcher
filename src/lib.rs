@@ -41,29 +41,15 @@
 //!
 //! ```
 //!
-//! * You can't create a [SequenceWatcher] with no sequence. [`SequenceWatcher::new`] will panic if
-//!   given an empty slice.
-//!
-//! ```should_panic
-//! # use seq_watcher::SequenceWatcher;
-//! let watcher: SequenceWatcher<u8> = SequenceWatcher::new(&[]);
-//! ```
-//!
-//! If you use [From] with an array reference, it will catch the empty array case at runtime.
-//!
-//! ```compile_fail
-//! # use seq_watcher::SequenceWatcher;
-//! let watcher: SequenceWatcher<u8> = SequenceWatcher::from(&[]);
-//! ```
-//!
-//! However, [SequenceWatchers] handles empty slices fine. If there are no sequences, it will
-//! always return false.
+//! [SequenceWatcher] and [SequenceWatchers] that are given empty sequences always return false.
 //!
 //! ```
 //! # use seq_watcher::SequenceWatchers;
+//! let mut watcher = SequenceWatchers::new(&[]);  // Create empty watchers.
 //! let mut watchers = SequenceWatchers::new(&[]);  // Create empty watchers.
 //! let mut all_bytes = Vec::with_capacity(256);
 //! for b in 0..=u8::MAX {
+//!     assert_eq!(watcher.check(&b), false);   // With no sequence, all checks are false.
 //!     assert_eq!(watchers.check(&b), false);  // With no sequences, all checks are false.
 //!     all_bytes.push(b);                      // Generate sequence with all bytes.
 //! }
@@ -94,10 +80,10 @@
 //! # Performance
 //!
 //! The [SequenceWatcher] structure is resonably performant, but the [SequenceWatchers] structure
-//! needs work. [SequenceWatchers] is currently implemented as a vector of [SequenceWatcher]
+//! needs work. [SequenceWatchers] is currently implemented as a [HashMap] of [SequenceWatcher]
 //! structures, but it would be better implemented with some sort of multi-state-aware trie.
 //! [SequenceWatchers] was created as an afterthought, since I mainly needed the [SequenceWatcher]
-//! for my other project.
+//! for another project.
 use std::{
     cell::Cell,
     collections::HashMap,
@@ -306,7 +292,6 @@ impl<T: PartialEq + Clone + Debug> SequenceWatcher<T> {
     ///
     /// [`SequenceWatcher::new`] will panic if the sequence slice is empty.
     pub fn new(seq: &[T]) -> Self {
-        assert!(!seq.is_empty(), "Error: Can't create a SequenceWatcher with no sequence!");
         Self {
             sequence: seq.to_vec(),
             index: Cell::new(0),
@@ -328,6 +313,7 @@ impl<T: PartialEq + Clone + Debug> SequenceWatcher<T> {
     /// assert_eq!(true, watcher.check(&Some("found")));
     /// ```
     pub fn check(&self, value: &T) -> bool {
+        if self.sequence.is_empty() { return false; }
         self.witness(value);
         if self.sequence.len() == self.index.get() {
             self.on_mismatch(&self.sequence[1..]);
@@ -477,18 +463,8 @@ impl<T: PartialEq + Clone + Debug> SequenceWatcher<T> {
 ///
 /// assert_eq!(true, watcher.check(&b'X'));
 /// ```
-///
-/// # Panics
-///
-/// Will panic if given an empty slice.
-/// ```should_panic
-/// # use seq_watcher::SequenceWatcher;
-/// let seq: Vec<u32> = vec![];
-/// let watcher = SequenceWatcher::from(seq);
-/// ```
 impl<T: PartialEq + Debug + Clone> From<Vec<T>> for SequenceWatcher<T> {
     fn from(src: Vec<T>) -> Self {
-        assert!(!src.is_empty(), "Error: Can't create a SequenceWatcher with no sequence!");
         Self {
             sequence: src,
             index: Cell::new(0),
@@ -516,16 +492,8 @@ impl<T: PartialEq + Debug + Clone> From<Vec<T>> for SequenceWatcher<T> {
 /// assert_eq!(true, watcher.check(&b'X'));
 /// ```
 ///
-/// # Panics
-///
-/// Will panic if given an empty slice.
-/// ```should_panic
-/// # use seq_watcher::SequenceWatcher;
-/// let watcher: SequenceWatcher<u8> = SequenceWatcher::from(&[][..]);
-/// ```
-///
 /// There is no support for a zero length array reference, so when using the array version, it will
-/// fail to compile rather than panicing at runtime.
+/// fail to compile.
 ///
 /// ```compile_fail
 /// # use seq_watcher::SequenceWatcher;
@@ -741,22 +709,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn empty_char_sequence_watcher_always_panics() {
+    fn empty_char_sequence_watcher_always_false() {
         let watcher = SequenceWatcher::new(&[]);
         assert_eq!(false, watcher.check(&'a'));
     }
 
     #[test]
-    #[should_panic]
-    fn empty_byte_sequence_watcher_always_panics() {
+    fn empty_byte_sequence_watcher_always_false() {
         let watcher = SequenceWatcher::new(&[]);
         assert_eq!(false, watcher.check(&b'a'));
     }
 
     #[test]
-    #[should_panic]
-    fn empty_byte_or_char_sequence_watcher_always_panics() {
+    fn empty_byte_or_char_sequence_watcher_always_false() {
         let watcher = SequenceWatcher::new(&[]);
         assert_eq!(false, watcher.check(&'a'));
     }
