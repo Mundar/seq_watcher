@@ -2,7 +2,7 @@ Monitors a stream of data looking for a sequence (or multiple sequences)
 
 # Stream Sequence Watcher
 
-Includes a pair of structures, [SequenceWatcher] and [SequenceWatchers]. They monitor a stream
+Includes a pair of structures, `SequenceWatcher` and `SequenceWatchers`. They monitor a stream
 of data looking for a specific sequence of values.
 
 The original purpose for this crate was to monitor bytes of data recieved from stdin for a
@@ -14,7 +14,7 @@ simultaneously.
 
 ## Intended Behavior and Limitations
 
-* [SequenceWatcher] and [SequenceWatchers] both continue monitoring the stream after a check
+* `SequenceWatcher` and `SequenceWatchers` both continue monitoring the stream after a check
   returns true. For example, looking for the sequence (A, A), would return false, true, true
   when given the input (A, A, A).
 
@@ -43,7 +43,7 @@ for (ch, expect) in test_stream {
 
 ```
 
-[SequenceWatcher] and [SequenceWatchers] that are given empty sequences always return false.
+`SequenceWatcher` and `SequenceWatchers` that are given empty sequences always return false.
 
 ```rust
 # use seq_watcher::SequenceWatchers;
@@ -63,11 +63,11 @@ for b in 0..u8::MAX {
 assert_eq!(watchers.check(&u8::MAX), true); // With last byte in sequence, returns true.
 ```
 
-* Datatypes compatible are slightly more restrictive for [SequenceWatchers] than for
-  [SequenceWatcher]. [SequenceWatchers] requires the datatype to be [Eq], wheras
-  [SequenceWatcher] only needs [PartialEq].
+* Datatypes compatible are slightly more restrictive for `SequenceWatchers` than for
+  `SequenceWatcher`. `SequenceWatchers` requires the datatype to be `Eq`, wheras
+  `SequenceWatcher` only needs `PartialEq`.
 
-Float types are [PartialEq] but not [Eq].
+Float types are `PartialEq` but not `Eq`.
 
 ```compile_fail
 # use seq_watcher::SequenceWatchers;
@@ -81,8 +81,8 @@ let watcher = SequenceWatcher::new(&[0.0]);     // Float values are PartialEq.
 
 # Performance
 
-The [SequenceWatcher] structure is resonably performant, but the [SequenceWatchers] structure
-needs work. [SequenceWatchers] is currently implemented as a [HashMap] of [SequenceWatcher]
+The `SequenceWatcher` structure is resonably performant, but the `SequenceWatchers` structure
+needs work. `SequenceWatchers` is currently implemented as a `HashMap` of `SequenceWatcher`
 structures, but it would be better implemented with some sort of multi-state-aware trie.
-[SequenceWatchers] was created as an afterthought, since I mainly needed the [SequenceWatcher]
+`SequenceWatchers` was created as an afterthought, since I mainly needed the `SequenceWatcher`
 for another project.
